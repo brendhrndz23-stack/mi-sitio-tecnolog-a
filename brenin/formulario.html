@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Datos</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Importar la fuente Roboto Mono desde Google Fonts para asegurar consistencia -->
+    <link rel="preconnect" href="">
+    <link rel="preconnect" href="" crossorigin>
+    <link href="/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Incluir jsPDF desde un CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+    <header>
+        <h1>Formulario de Datos</h1>
+        <nav>
+            <ul>
+               
+                <li><a href="general.html">Información General</a></li>
+                <li><a href="avance.html">Avances y Futuro</a></li>
+                <li><a href="formulario.html" class="active">Formulario</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+         <section class="content">
+       
+        <form id="contactForm">
+            <label for="name">Nombre</label>
+            <input id="name" name="name" type="text" required>
+
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" required>
+
+            <label for="message">Mensaje</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                <button type="submit">Guardar</button>
+                <button type="button" id="clearStorage">Limpiar guardados</button>
+                <button type="button" id="exportCSV">Exportar a Excel (CSV)</button>
+                <button type="button" id="exportPDF">Exportar a PDF</button>
+            </div>
+        </form>
+
+        <h3>Entradas guardadas</h3>
+        <table id="savedTable">
+            <thead><tr><th>#</th><th>Nombre</th><th>Email</th><th>Mensaje</th></tr></thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="nav-buttons" style="margin-top:18px;">
+            <a href="avance.html" class="back-button">Regresar</a>
+        </div>
+    </section>
+
+    <footer>
+         <p>&copy; 2025 BRENDA YAMILETH PÉREZ HERNÁNDEZ 2-1</p>
+    </footer>
+
+    <script>
+    // === Manejo de almacenamiento local para el formulario ===
+const form = document.getElementById('contactForm');
+const savedKey = 'sitio_demo_contactos_v1';
+const savedTableBody = document.querySelector('#savedTable tbody');
+
+function escapeHtml(unsafe) {
+  return String(unsafe).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[c]);
+}
+
+function loadSaved() {
+  const raw = localStorage.getItem(savedKey);
+  const arr = raw ? JSON.parse(raw) : [];
+  savedTableBody.innerHTML = '';
+  arr.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.message)}</td>`;
+    savedTableBody.appendChild(tr);
+  });
+  return arr;
+}
+
+function saveEntry(entry) {
+  const arr = loadSaved();
+  arr.push(entry);
+  localStorage.setItem(savedKey, JSON.stringify(arr));
+  loadSaved();
+}
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {
+    name: form.name.value.trim(),
+    email: form.email.value.trim(),
+    message: form.message.value.trim(),
+    createdAt: new Date().toISOString()
+  };
+  saveEntry(data);
+  form.reset();
+  alert('✅ Entrada guardada localmente. Puedes exportarla a CSV o PDF.');
+});
+
+document.getElementById('clearStorage').addEventListener('click', () => {
+  if (confirm('¿Seguro que quieres eliminar todas las entradas guardadas?')) {
+    localStorage.removeItem(savedKey);
+    loadSaved();
+  }
+});
+
+// === Exportar a CSV (Excel puede abrirlo) ===
+document.getElementById('exportCSV').addEventListener('click', () => {
+  const arr = loadSaved();
+  if (!arr.length) {
+    alert('⚠️ No hay entradas para exportar.');
+    return;
+  }
+  const header = ['Nombre', 'Email', 'Mensaje', 'Fecha'];
+  const rows = arr.map(r => [r.name, r.email, r.message, r.createdAt]);
+  const csv = [header, ...rows]
+    .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'contactos.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+// === Exportar PDF con escala controlada ===
+async function exportPDF() {
+  const arr = loadSaved();
+  if (!arr.length) {
+    alert('⚠️ No hay entradas para exportar.');
+    return;
+  }
+
+  // aplicar clase para reducir visualmente el tamaño antes de exportar
+  form.classList.add('pdf-scale');
+
+  // crear una copia temporal de la tabla para capturar
+  const node = document.createElement('div');
+  node.style.padding = '20px';
+  node.style.background = 'white';
+  node.style.color = '#000';
+  node.style.width = '800px';
+  node.style.margin = '0 auto';
+  node.style.textAlign = 'center';
+  const table = document.querySelector('#savedTable').cloneNode(true);
+  node.appendChild(table);
+  document.body.appendChild(node);
+
+  try {
+    // cargar librerías si no están
+    if (!window.html2canvasLoaded) {
+      const s1 = document.createElement('script');
+      s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      document.head.appendChild(s1);
+      await new Promise(r => s1.onload = r);
+      window.html2canvasLoaded = true;
+    }
+    if (!window.jspdfLoaded) {
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      document.head.appendChild(s2);
+      await new Promise(r => s2.onload = r);
+      window.jspdfLoaded = true;
+    }
+
+    const canvas = await html2canvas(node, { scale: 1.2 });
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+
+    // generar PDF adaptado a hoja A4
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 20;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let y = 10;
+    pdf.addImage(imgData, 'PNG', 10, y, imgWidth, imgHeight);
+    pdf.save('contactos.pdf');
+  } catch (err) {
+    console.error(err);
+    alert('❌ Error al generar PDF: ' + err.message);
+  } finally {
+    node.remove();
+    form.classList.remove('pdf-scale');
+  }
+}
+
+document.getElementById('exportPDF').addEventListener('click', exportPDF);
+
+// === Cargar al inicio ===
+loadSaved();
+
+    </script>
